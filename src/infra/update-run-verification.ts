@@ -1,5 +1,17 @@
 import type { UpdateRunRecord } from "./update-run-record.js";
 
+export type UpdateRunVerificationCheck = NonNullable<
+  UpdateRunRecord["verification"]["checks"]
+>[number];
+
+export type UpdateRunVerificationStatus = UpdateRunVerificationCheck["status"];
+
+export function areUpdateRunVerificationChecksHealthy(
+  checks: UpdateRunRecord["verification"]["checks"],
+): boolean {
+  return (checks ?? []).every((check) => check.required === false || check.status === "pass");
+}
+
 export function isUpdateRunVerificationConfirmed(
   verification: UpdateRunRecord["verification"],
 ): boolean {
@@ -11,6 +23,33 @@ export function isUpdateRunVerificationConfirmed(
     verification.channelsReady === true &&
     verification.pluginErrors?.length === 0
   );
+}
+
+/**
+ * A confirmed Gateway is serving, but it has not necessarily survived one
+ * ordinary scheduler cycle yet. This stricter predicate is intentionally
+ * separate for backwards compatibility with existing update consumers.
+ */
+export function isUpdateRunVerificationHealthy(
+  verification: UpdateRunRecord["verification"],
+): boolean {
+  return (
+    isUpdateRunVerificationConfirmed(verification) &&
+    areUpdateRunVerificationChecksHealthy(verification.checks) &&
+    verification.normalCycle?.status === "pass"
+  );
+}
+
+export function recordUpdateRunVerificationCheckRecord(
+  record: UpdateRunRecord,
+  check: UpdateRunVerificationCheck,
+  options: { onlyIfRunning?: true } = {},
+): void {
+  if (options.onlyIfRunning && record.status !== "running") {
+    return;
+  }
+  const checks = (record.verification.checks ?? []).filter((entry) => entry.id !== check.id);
+  record.verification.checks = [...checks, check].slice(-32);
 }
 
 export function recordUpdateRunVerificationRecord(
