@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   areUpdateRunVerificationChecksHealthy,
   isUpdateRunVerificationHealthy,
+  recordUpdateRunVerificationCheckRecord,
 } from "./update-run-verification.js";
 
 describe("update run verification", () => {
@@ -32,5 +33,32 @@ describe("update run verification", () => {
         normalCycle: { status: "pass", observedAtMs: 20 },
       }),
     ).toBe(true);
+  });
+
+  it("retains required checks when optional diagnostics exceed the bound", () => {
+    const record = {
+      status: "succeeded",
+      verification: {
+        checks: Array.from({ length: 32 }, (_, index) => ({
+          id: `optional-${index}`,
+          status: "pass" as const,
+          required: false,
+        })),
+      },
+    } as Parameters<typeof recordUpdateRunVerificationCheckRecord>[0];
+
+    recordUpdateRunVerificationCheckRecord(record, {
+      id: "required-failure",
+      status: "fail",
+      required: true,
+    });
+    expect(record.verification.checks).toEqual([
+      { id: "required-failure", status: "fail", required: true },
+      ...Array.from({ length: 31 }, (_, index) => ({
+        id: `optional-${index + 1}`,
+        status: "pass" as const,
+        required: false,
+      })),
+    ]);
   });
 });

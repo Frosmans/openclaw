@@ -37,6 +37,10 @@ export type UpdateRunWriteOperations = {
     input: UpdateRunWriteInput & { phase: UpdateRunPhase; patch: UpdateRunPhasePatch };
     output: UpdateRunWriteResult;
   };
+  "updateRuns.recordVerification": {
+    input: UpdateRunWriteInput & { verification: UpdateRunRecord["verification"] };
+    output: UpdateRunWriteResult;
+  };
 };
 
 export type UpdateRunWriteCommand = {
