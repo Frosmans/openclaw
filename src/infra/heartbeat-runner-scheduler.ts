@@ -338,6 +338,21 @@ export function startHeartbeatRunner(opts: {
         state.agents.set(targetAgentId, targetAgent);
       }
       const { result } = await runOneAgent(targetAgent, true);
+      if (
+        result.status === "ran" &&
+        params.source === "interval" &&
+        params.intent === "scheduled" &&
+        targetAgent.intervalMs !== undefined
+      ) {
+        try {
+          await opts.onNormalCycle?.({
+            agentIds: [targetAgent.agentId],
+            durationMs: Date.now() - startedAt,
+          });
+        } catch (error) {
+          log.warn(`heartbeat normal-cycle observer failed: ${formatErrorMessage(error)}`);
+        }
+      }
       return result.status === "ran"
         ? { status: "ran", durationMs: Date.now() - startedAt }
         : result;

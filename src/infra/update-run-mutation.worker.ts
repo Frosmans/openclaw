@@ -8,6 +8,7 @@ import type {
   UpdateRunWriteOperations,
 } from "./update-run-mutation.types.js";
 import { readRecoveries } from "./update-run-recovery-store.js";
+import { recordUpdateRunVerificationRecord } from "./update-run-verification.js";
 import {
   applyUpdateRunPhase,
   applyUpdateRunStep,
@@ -53,8 +54,10 @@ export function recordUpdateRunMutationInWorker(
       (current) => {
         if (command.type === "updateRuns.recordPhase") {
           applyUpdateRunPhase(current, command.input.phase, command.input.patch);
-        } else {
+        } else if (command.type === "updateRuns.recordStep") {
           applyUpdateRunStep(current, command.input.step);
+        } else {
+          recordUpdateRunVerificationRecord(current, command.input.verification);
         }
       },
       codecOptions,

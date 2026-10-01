@@ -4,7 +4,7 @@ export type UpdateRunVerificationCheck = NonNullable<
   UpdateRunRecord["verification"]["checks"]
 >[number];
 
-export type UpdateRunVerificationStatus = UpdateRunVerificationCheck["status"];
+const MAX_VERIFICATION_CHECKS = 32;
 
 export function areUpdateRunVerificationChecksHealthy(
   checks: UpdateRunRecord["verification"]["checks"],
@@ -48,8 +48,17 @@ export function recordUpdateRunVerificationCheckRecord(
   if (options.onlyIfRunning && record.status !== "running") {
     return;
   }
-  const checks = (record.verification.checks ?? []).filter((entry) => entry.id !== check.id);
-  record.verification.checks = [...checks, check].slice(-32);
+  const checks = [
+    ...(record.verification.checks ?? []).filter((entry) => entry.id !== check.id),
+    check,
+  ];
+  const required = checks.filter((entry) => entry.required !== false);
+  if (required.length > MAX_VERIFICATION_CHECKS) {
+    throw new Error("Required update verification checks exceed the retained check limit");
+  }
+  const optionalSlots = MAX_VERIFICATION_CHECKS - required.length;
+  const optional = checks.filter((entry) => entry.required === false).slice(-optionalSlots);
+  record.verification.checks = [...required, ...optional];
 }
 
 export function recordUpdateRunVerificationRecord(

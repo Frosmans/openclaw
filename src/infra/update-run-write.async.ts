@@ -29,7 +29,8 @@ async function recordUpdateRunMutationAsync(
   runId: string,
   mutation:
     | { kind: "step"; step: UpdateRunStep & { reason?: string } }
-    | { kind: "phase"; phase: UpdateRunPhase; patch: UpdateRunPhasePatch },
+    | { kind: "phase"; phase: UpdateRunPhase; patch: UpdateRunPhasePatch }
+    | { kind: "verification"; verification: UpdateRunRecord["verification"] },
   options: UpdateRunWriteOptions = {},
 ): Promise<UpdateRunRecord> {
   options.assertAccepting?.();
@@ -58,10 +59,15 @@ async function recordUpdateRunMutationAsync(
   const command = structuredClone<UpdateRunWriteCommand>(
     mutation.kind === "step"
       ? { type: "updateRuns.recordStep", input: { ...input, step: mutation.step } }
-      : {
-          type: "updateRuns.recordPhase",
-          input: { ...input, phase: mutation.phase, patch: mutation.patch },
-        },
+      : mutation.kind === "phase"
+        ? {
+            type: "updateRuns.recordPhase",
+            input: { ...input, phase: mutation.phase, patch: mutation.patch },
+          }
+        : {
+            type: "updateRuns.recordVerification",
+            input: { ...input, verification: mutation.verification },
+          },
   );
   const pending = runOpenClawStateWorkerOperation(context, (scope) => scope.execute(command), {
     existingOnly: true,
@@ -103,4 +109,12 @@ export function recordUpdateRunPhaseAsync(
   options: UpdateRunWriteOptions = {},
 ): Promise<UpdateRunRecord> {
   return recordUpdateRunMutationAsync(runId, { kind: "phase", phase, patch }, options);
+}
+
+export function recordUpdateRunVerificationAsync(
+  runId: string,
+  verification: UpdateRunRecord["verification"],
+  options: UpdateRunWriteOptions = {},
+): Promise<UpdateRunRecord> {
+  return recordUpdateRunMutationAsync(runId, { kind: "verification", verification }, options);
 }
