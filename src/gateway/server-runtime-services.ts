@@ -18,6 +18,7 @@ import {
   schedulePendingSessionDeliveries,
   startSessionDeliveryRuntime,
 } from "../infra/session-delivery-queue-runtime.js";
+import { recordLatestUpdateRunNormalCycle } from "../infra/update-run-normal-cycle.js";
 import {
   isGatewayWorkAdmissionClosed,
   runWithGatewayIndependentRootWorkAdmission,
@@ -459,6 +460,9 @@ export function activateGatewayScheduledServices(params: {
   const heartbeatRunner = startHeartbeatRunner({
     cfg: params.cfgAtStart,
     readCurrentConfig: getRuntimeConfig,
+    onNormalCycle: () => {
+      recordLatestUpdateRunNormalCycle();
+    },
     ...(heartbeatGatewayContextResolver
       ? {
           runOnce: async (opts: Parameters<typeof runHeartbeatOnce>[0]) => {
