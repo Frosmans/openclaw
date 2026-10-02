@@ -7,8 +7,8 @@ import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worke
 import type { OpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.types.js";
 import { getUpdateRun, listUpdateRuns, recordUpdateRunVerification } from "./update-run-ledger.js";
 import type { UpdateRunRecord } from "./update-run-record.js";
-import { isUpdateRunVerificationConfirmed } from "./update-run-verification.js";
-import { recordUpdateRunVerificationAsync } from "./update-run-write.async.js";
+import { isUpdateRunNormalCycleAwaiting } from "./update-run-verification.js";
+import { recordUpdateRunNormalCycleAsync } from "./update-run-write.async.js";
 
 export const DEFAULT_UPDATE_NORMAL_CYCLE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -20,15 +20,7 @@ export type UpdateNormalCycleOptions = OpenClawStateDatabaseOptions & {
 };
 
 function isAwaitingNormalCycle(run: UpdateRunRecord, nowMs: number, maxAgeMs: number): boolean {
-  return (
-    run.status === "succeeded" &&
-    run.phase === "finished" &&
-    run.finishedAtMs !== null &&
-    nowMs - run.finishedAtMs >= 0 &&
-    nowMs - run.finishedAtMs <= maxAgeMs &&
-    isUpdateRunVerificationConfirmed(run.verification) &&
-    run.verification.normalCycle?.status !== "pass"
-  );
+  return isUpdateRunNormalCycleAwaiting(run, nowMs, maxAgeMs);
 }
 
 function findNormalCycleCandidate(
@@ -102,9 +94,10 @@ export async function recordLatestUpdateRunNormalCycleAsync(
     context.admission.assertCurrent();
     options.signal?.throwIfAborted();
   };
-  return await recordUpdateRunVerificationAsync(
+  return await recordUpdateRunNormalCycleAsync(
     candidate.runId,
     { normalCycle: { status: "pass", observedAtMs: nowMs } },
+    { nowMs, maxAgeMs },
     {
       ...options,
       context,

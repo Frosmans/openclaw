@@ -10,7 +10,11 @@ import {
   getUpdateRun,
   recordUpdateRunVerification,
 } from "./update-run-ledger.js";
-import { recordLatestUpdateRunNormalCycleAsync } from "./update-run-normal-cycle.js";
+import {
+  getLatestUpdateRunAwaitingNormalCycle,
+  recordLatestUpdateRunNormalCycleAsync,
+} from "./update-run-normal-cycle.js";
+import { recordUpdateRunNormalCycleAsync } from "./update-run-write.async.js";
 
 const tempDirs = createTempDirTracker();
 
@@ -50,6 +54,43 @@ describe("worker-backed normal-cycle promotion", () => {
       status: "pass",
       observedAtMs: 11_000,
     });
+    clock.mockRestore();
+  });
+
+  it("rechecks latest-run and active-update eligibility in the persistence transaction", async () => {
+    const options = { env: { OPENCLAW_STATE_DIR: tempDirs.make("openclaw-normal-cycle-race-") } };
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    const run = createUpdateRun({ trigger: "cli" }, options);
+    recordUpdateRunVerification(
+      run.runId,
+      {
+        serviceRunning: true,
+        versionMatch: true,
+        settled: true,
+        readyz: true,
+        channelsReady: true,
+        pluginErrors: [],
+      },
+      options,
+    );
+    finishUpdateRun(run.runId, { status: "succeeded" }, options);
+
+    const selectedBeforeTheWrite = getLatestUpdateRunAwaitingNormalCycle({
+      ...options,
+      nowMs: 11_000,
+    });
+    expect(selectedBeforeTheWrite?.runId).toBe(run.runId);
+    createUpdateRun({ trigger: "cli" }, options);
+
+    const persisted = await recordUpdateRunNormalCycleAsync(
+      selectedBeforeTheWrite!.runId,
+      { normalCycle: { status: "pass", observedAtMs: 11_000 } },
+      { nowMs: 11_000, maxAgeMs: 24 * 60 * 60 * 1000 },
+      options,
+    );
+
+    expect(persisted).toBeUndefined();
+    expect(getUpdateRun(run.runId, options)?.verification.normalCycle).toBeUndefined();
     clock.mockRestore();
   });
 });
