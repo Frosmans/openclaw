@@ -14,6 +14,15 @@ import type { UpdateRunRecord } from "./update-run-record.js";
 import { UpdateRunRecordSchema } from "./update-run-schema.js";
 
 const JSON_BYTES = 16 * 1024;
+const PRESERVED_VERIFICATION_TEXT_FIELDS = new Set([
+  "buildId",
+  "reason",
+  "runningBuildId",
+  "runningVersion",
+  "service",
+  "status",
+  "version",
+]);
 const RETAINED_STEP_NAMES = [
   ...UPDATE_RUN_PHASES,
   "candidate-admission",
@@ -160,7 +169,7 @@ function boundedJson(
 function boundedVerificationJson(verification: UpdateRunRecord["verification"]): string {
   const checks = verification.checks;
   if (!checks) {
-    return boundedJson(verification);
+    return boundedJson(verification, JSON_BYTES, PRESERVED_VERIFICATION_TEXT_FIELDS);
   }
 
   const requiredChecks = checks.filter((check) => check.required !== false);
@@ -179,7 +188,7 @@ function boundedVerificationJson(verification: UpdateRunRecord["verification"]):
   const boundedDiagnostics =
     Object.keys(diagnostics).length === 0 || diagnosticsBudget < 2
       ? "{}"
-      : boundedJson(diagnostics, diagnosticsBudget);
+      : boundedJson(diagnostics, diagnosticsBudget, PRESERVED_VERIFICATION_TEXT_FIELDS);
   const diagnosticsObject = JSON.parse(boundedDiagnostics) as Record<string, unknown>;
   const serialize = (retainedChecks: typeof checks): string =>
     JSON.stringify({ ...diagnosticsObject, checks: retainedChecks });
