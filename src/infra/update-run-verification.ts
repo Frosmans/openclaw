@@ -6,6 +6,22 @@ export type UpdateRunVerificationCheck = NonNullable<
 
 const MAX_VERIFICATION_CHECKS = 32;
 
+export function isUpdateRunNormalCycleAwaiting(
+  run: UpdateRunRecord,
+  nowMs: number,
+  maxAgeMs: number,
+): boolean {
+  return (
+    run.status === "succeeded" &&
+    run.phase === "finished" &&
+    run.finishedAtMs !== null &&
+    nowMs - run.finishedAtMs >= 0 &&
+    nowMs - run.finishedAtMs <= maxAgeMs &&
+    isUpdateRunVerificationConfirmed(run.verification) &&
+    run.verification.normalCycle?.status !== "pass"
+  );
+}
+
 export function areUpdateRunVerificationChecksHealthy(
   checks: UpdateRunRecord["verification"]["checks"],
 ): boolean {
@@ -57,7 +73,10 @@ export function recordUpdateRunVerificationCheckRecord(
     throw new Error("Required update verification checks exceed the retained check limit");
   }
   const optionalSlots = MAX_VERIFICATION_CHECKS - required.length;
-  const optional = checks.filter((entry) => entry.required === false).slice(-optionalSlots);
+  const optional =
+    optionalSlots > 0
+      ? checks.filter((entry) => entry.required === false).slice(-optionalSlots)
+      : [];
   record.verification.checks = [...required, ...optional];
 }
 

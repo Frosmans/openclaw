@@ -7,8 +7,12 @@ import type {
   UpdateRunWriteCommand,
   UpdateRunWriteOperations,
 } from "./update-run-mutation.types.js";
+import { readUpdateRuns } from "./update-run-read.kernel.js";
 import { readRecoveries } from "./update-run-recovery-store.js";
-import { recordUpdateRunVerificationRecord } from "./update-run-verification.js";
+import {
+  isUpdateRunNormalCycleAwaiting,
+  recordUpdateRunVerificationRecord,
+} from "./update-run-verification.js";
 import {
   applyUpdateRunPhase,
   applyUpdateRunStep,
@@ -46,6 +50,23 @@ export function recordUpdateRunMutationInWorker(
       if (recovery) {
         assertCurrent("commit");
         return { kind: "recovery-required", recovery };
+      }
+    }
+    if (command.type === "updateRuns.recordVerification" && input.normalCycleEligibility) {
+      const runs = readUpdateRuns(db, { limit: 32 });
+      const candidate = runs.find((run) => run.status !== "skipped" && run.phase === "finished");
+      if (
+        runs.some((run) => run.status === "running") ||
+        candidate?.runId !== input.runId ||
+        !candidate ||
+        !isUpdateRunNormalCycleAwaiting(
+          candidate,
+          input.normalCycleEligibility.nowMs,
+          input.normalCycleEligibility.maxAgeMs,
+        )
+      ) {
+        assertCurrent("commit");
+        return { kind: "not-recorded" };
       }
     }
     const record = mutateRunInTransaction(
