@@ -82,24 +82,6 @@ export function executeSharedStateCommand(
   if (stateWorkerRegistry.has(command)) {
     return stateWorkerRegistry.execute(command, { open, stateOptions });
   }
-  if (isWorkerInferenceStoreCommand(command)) {
-    return executeWorkerInferenceStoreCommand(command, open());
-  }
-  if (isWorkspaceJournalWriteCommand(command)) {
-    return executeWorkspaceJournalCommand(command, open());
-  }
-  if (isPlacementSessionToolCommand(command)) {
-    return executePlacementSessionToolCommand(command, open());
-  }
-  if (isPlacementTurnClaimCommand(command)) {
-    return executePlacementTurnClaimCommand(command, open());
-  }
-  if (isWorkerEnvironmentCommand(command)) {
-    return executeWorkerEnvironmentCommand(command, open());
-  }
-  if (command.type === "workerPlacements.startDispatch") {
-    return startWorkerPlacementDispatchInWorker(command.input, open());
-  }
   if (
     command.type === "updateRuns.recordStep" ||
     command.type === "updateRuns.recordPhase" ||
