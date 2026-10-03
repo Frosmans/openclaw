@@ -22,6 +22,12 @@ import { readWorkspaceStateSnapshotForDirectoryInDatabase } from "../agents/work
 import { isChannelIngressReadCommand } from "../channels/message/ingress-queue-read-contract.js";
 import { readChannelIngressInDatabase } from "../channels/message/ingress-queue-read.worker.js";
 import {
+  readClawInstallRecordFromDatabase,
+  readClawInstallRecordsInDatabase,
+  readClawOrphanWorkspaceInDatabase,
+  readClawPackageRefsInDatabase,
+} from "../claws/provenance-read.kernel.js";
+import {
   isCronStateReadCommand,
   readCronStateCommandInDatabase,
 } from "../cron/store/read-command.js";
@@ -48,6 +54,7 @@ import {
 import { readWorkerPlacementChangeSnapshotInDatabase } from "../gateway/worker-environments/placement-row-codec.js";
 import { readWorkspaceJournalInDatabase } from "../gateway/worker-environments/placement-workspace-journal.js";
 import { isWorkspaceJournalReadCommand } from "../gateway/worker-environments/placement-workspace-journal.types.js";
+import { listPendingWorkerWorkspaceResultsInDatabase } from "../gateway/worker-environments/placement-workspace-result.js";
 import {
   readWorkerEnvironmentFacts,
   readWorkerEnvironmentPrunePage,
@@ -84,10 +91,7 @@ import {
 } from "../skills/library/selection-read.kernel.js";
 import { isTuiLastSessionReadCommand } from "../tui/tui-last-session.contract.js";
 import { readTuiLastSessionCommand } from "../tui/tui-last-session.kernel.js";
-import {
-  readAgentDatabaseDeletionSnapshotInDatabase,
-  readAgentDeletionJournalStatusInDatabase,
-} from "./agent-deletion-journal.read.js";
+import { readAgentDatabaseDeletionSnapshotInDatabase } from "./agent-deletion-journal.read.js";
 import { readBackupRunsInDatabase } from "./backup-run-records.kernel.js";
 import { readConfigMachineStateRowInDatabase } from "./config-machine-state.js";
 import { readGitHubPublicationSessionLifecycle } from "./github-publication-session-lifecycles.js";
@@ -106,6 +110,7 @@ import {
   isStateDiagnosticCommand,
   readStateDiagnosticCommand,
 } from "./openclaw-state-read-diagnostics.js";
+import { stateReadRegistry } from "./openclaw-state-read-operation-registry.js";
 import { readStateRegistryCommand } from "./openclaw-state-read-registry.js";
 import type {
   OpenClawStateReadReply,
@@ -133,12 +138,16 @@ import {
 import { readUserProfileAvatarCommand } from "./user-profiles-internal.js";
 
 serveOwnedWorkerTasks(
-  (input): OpenClawStateReadReply => {
+  function read(input): OpenClawStateReadReply | Promise<OpenClawStateReadReply> {
     let sourceAdmitted: true | undefined;
     let nativeCleanupFailure: OpenClawStateReadReply["nativeCleanupFailure"];
     try {
       if (!isReadRequest(input)) {
         throw new Error("Shared-state reader requires a captured state location and read command");
+      }
+      const prepared = stateReadRegistry.prepare(input.command.type);
+      if (prepared) {
+        return prepared.then(() => read(input));
       }
       const reply = runWithSqliteWorkerStateContext(input.context, (): OpenClawStateReadReply => {
         if (input.checkFreshAdmission) {
@@ -212,6 +221,22 @@ serveOwnedWorkerTasks(
         const result = withOpenClawStateReadOnlyLocation(
           ({ db }): OpenClawStateReadResult => {
             sourceAdmitted = true;
+            if (command.type === "claws.packageOwnership") {
+              const install =
+                command.agentId === undefined
+                  ? undefined
+                  : readClawInstallRecordFromDatabase(db, command.agentId);
+              return {
+                type: command.type,
+                install,
+                installs: command.includeInstalls ? readClawInstallRecordsInDatabase(db) : [],
+                packageRefs: readClawPackageRefsInDatabase(db, { agentId: command.agentId }),
+                orphanWorkspace:
+                  command.agentId !== undefined && !install
+                    ? readClawOrphanWorkspaceInDatabase(db, command.agentId)
+                    : undefined,
+              };
+            }
             if (command.type === "doctor.gatewayOwnerLease.read") {
               return { type: command.type, lease: readGatewayOwnerLeaseFromDatabase(db) };
             }
@@ -223,12 +248,6 @@ serveOwnedWorkerTasks(
                   input.databasePath,
                   command.purpose,
                 ),
-              };
-            }
-            if (command.type === "agentDeletionJournal.status") {
-              return {
-                type: command.type,
-                status: readAgentDeletionJournalStatusInDatabase(db, command.agentId),
               };
             }
             if (command.type === "deliveryQueue.outbound") {
@@ -257,6 +276,9 @@ serveOwnedWorkerTasks(
             }
             if (isChannelIngressReadCommand(command)) {
               return readChannelIngressInDatabase(db, command);
+            }
+            if ("input" in command && stateReadRegistry.has(command)) {
+              return stateReadRegistry.execute(command, db);
             }
             if (command.type === "subagents.runs") {
               if (command.scope.kind === "all") {
@@ -652,6 +674,12 @@ serveOwnedWorkerTasks(
               return {
                 type: command.type,
                 candidates: readWorkerPlacementRecoveryCandidatesInDatabase(db),
+              };
+            }
+            if (command.type === "workers.placementPendingResults") {
+              return {
+                type: command.type,
+                pendingResults: listPendingWorkerWorkspaceResultsInDatabase(db, command.sessionId),
               };
             }
             if (command.type === "workers.placementProjection") {

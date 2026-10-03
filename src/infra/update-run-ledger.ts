@@ -300,10 +300,10 @@ export function recordUpdateRunPhase(
 
 export function recordUpdateRunStep(
   runId: string,
-  { reason, ...step }: UpdateRunStep & { reason?: string },
+  step: UpdateRunStep & { reason?: string },
   options: LedgerOptions = {},
 ): UpdateRunRecord {
-  return mutateRun(runId, (record) => applyUpdateRunStep(record, { ...step, reason }), options);
+  return mutateRun(runId, (record) => applyUpdateRunStep(record, step), options);
 }
 
 export function recordUpdateRunRepairContinuation(

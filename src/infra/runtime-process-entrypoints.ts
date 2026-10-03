@@ -20,6 +20,9 @@ export const runtimeProcessEntrypoints = {
   spawnBroker: runtimeProcessEntrypoint("process/spawn-broker/worker"),
   cronStreamMatcher: runtimeProcessEntrypoint("gateway/cron-stream-matcher.worker"),
   controlUiFile: runtimeProcessEntrypoint("gateway/control-ui-file.worker"),
+  nodeBootstrapArtifact: runtimeProcessEntrypoint(
+    "gateway/worker-environments/node-bootstrap-artifact.worker",
+  ),
   nativeHookRelayClient: runtimeProcessEntrypoint("agents/harness/native-hook-relay-client.worker"),
   computerHost: runtimeProcessEntrypoint("gateway/desktop/computer.worker"),
   imageProcessor: runtimeProcessEntrypoint("media/image-processor.worker"),
@@ -38,6 +41,9 @@ export const runtimeProcessEntrypoints = {
   boardStore: runtimeProcessEntrypoint("boards/sqlite-board-store.worker"),
   sessionSharingStore: runtimeProcessEntrypoint("config/sessions/session-sharing-store.worker"),
   heartbeatOutcomeStore: runtimeProcessEntrypoint("infra/heartbeat-outcome-store.worker"),
+  messageToolRunOutcomeStore: runtimeProcessEntrypoint(
+    "infra/message-tool-run-outcome-store.worker",
+  ),
   contextEngineTurnOutbox: runtimeProcessEntrypoint(
     "agents/harness/context-engine-turn-outbox.worker",
   ),
@@ -67,6 +73,9 @@ export const runtimeProcessEntrypoints = {
     "config/sessions/session-accessor.sqlite-archive.worker",
   ),
   sessionTranscript: runtimeProcessEntrypoint("config/sessions/session-transcript.worker"),
+  workerTranscriptCommit: runtimeProcessEntrypoint(
+    "gateway/worker-environments/transcript-commit.worker",
+  ),
   sessionManagerMetadata: runtimeProcessEntrypoint(
     "agents/sessions/session-manager-metadata.worker",
   ),
