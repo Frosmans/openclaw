@@ -10,10 +10,11 @@ import {
   getUpdateRun,
   recordUpdateRunVerification,
 } from "./update-run-ledger.js";
+import { recordLatestUpdateRunNormalCycleAsync } from "./update-run-normal-cycle.js";
 import {
   getLatestUpdateRunAwaitingNormalCycle,
-  recordLatestUpdateRunNormalCycleAsync,
-} from "./update-run-normal-cycle.js";
+  recordLatestUpdateRunNormalCycle,
+} from "./update-run-normal-cycle.test-support.js";
 import { recordUpdateRunNormalCycleAsync } from "./update-run-write.async.js";
 
 const tempDirs = createTempDirTracker();
@@ -26,6 +27,31 @@ afterEach(async () => {
 });
 
 describe("worker-backed normal-cycle promotion", () => {
+  it("records a normal-cycle promotion without changing the existing confirmation contract", () => {
+    const options = { env: { OPENCLAW_STATE_DIR: tempDirs.make("openclaw-normal-cycle-sync-") } };
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    const run = createUpdateRun({ trigger: "cli" }, options);
+    recordUpdateRunVerification(
+      run.runId,
+      {
+        serviceRunning: true,
+        versionMatch: true,
+        settled: true,
+        readyz: true,
+        channelsReady: true,
+        pluginErrors: [],
+      },
+      options,
+    );
+    finishUpdateRun(run.runId, { status: "succeeded" }, options);
+    expect(recordLatestUpdateRunNormalCycle({ ...options, nowMs: 11_000 })).toMatchObject({
+      runId: run.runId,
+      verification: { normalCycle: { status: "pass", observedAtMs: 11_000 } },
+    });
+    expect(recordLatestUpdateRunNormalCycle({ ...options, nowMs: 12_000 })).toBeUndefined();
+    clock.mockRestore();
+  });
+
   it("persists the scheduled-cycle receipt through the state worker", async () => {
     const options = { env: { OPENCLAW_STATE_DIR: tempDirs.make("openclaw-normal-cycle-") } };
     const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
