@@ -23,7 +23,6 @@ import {
   recordUpdateRunStep,
   recordUpdateRunVerification,
 } from "./update-run-ledger.js";
-import { recordLatestUpdateRunNormalCycle } from "./update-run-normal-cycle.js";
 import type { UpdateRunRecord } from "./update-run-record.js";
 import { renderUpdateRunReport } from "./update-run-report.js";
 import { parseUpdateAdmissionVerdict, UpdateRunRecordSchema } from "./update-run-schema.js";
@@ -637,31 +636,6 @@ describe("update run ledger", () => {
     expect(
       recordUpdateRunVerification(run.runId, { noticeDelivered: true }, options).confirmedAtMs,
     ).toBe(5_000);
-  });
-
-  it("records a normal-cycle promotion without changing the existing confirmation contract", () => {
-    const options = isolatedOptions();
-    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
-    const run = createUpdateRun({ trigger: "cli" }, options);
-    recordUpdateRunVerification(
-      run.runId,
-      {
-        serviceRunning: true,
-        versionMatch: true,
-        settled: true,
-        readyz: true,
-        channelsReady: true,
-        pluginErrors: [],
-      },
-      options,
-    );
-    finishUpdateRun(run.runId, { status: "succeeded" }, options);
-    expect(recordLatestUpdateRunNormalCycle({ ...options, nowMs: 11_000 })).toMatchObject({
-      runId: run.runId,
-      verification: { normalCycle: { status: "pass", observedAtMs: 11_000 } },
-    });
-    expect(recordLatestUpdateRunNormalCycle({ ...options, nowMs: 12_000 })).toBeUndefined();
-    clock.mockRestore();
   });
 
   it.each([

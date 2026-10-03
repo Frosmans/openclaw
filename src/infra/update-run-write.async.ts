@@ -130,16 +130,6 @@ export function recordUpdateRunPhaseAsync(
   );
 }
 
-export function recordUpdateRunVerificationAsync(
-  runId: string,
-  verification: UpdateRunRecord["verification"],
-  options: UpdateRunWriteOptions = {},
-): Promise<UpdateRunRecord> {
-  return requireRecorded(
-    recordUpdateRunMutationAsync(runId, { kind: "verification", verification }, options),
-  );
-}
-
 export function recordUpdateRunNormalCycleAsync(
   runId: string,
   verification: UpdateRunRecord["verification"],

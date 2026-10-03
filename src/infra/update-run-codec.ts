@@ -206,6 +206,7 @@ function boundedVerificationJson(verification: UpdateRunRecord["verification"]):
     Object.keys(diagnostics).length === 0 || diagnosticsBudget < 2
       ? "{}"
       : boundedJson(diagnostics, diagnosticsBudget, PRESERVED_VERIFICATION_TEXT_FIELDS);
+  // SAFETY: boundedJson returns a JSON object for the diagnostics map.
   const diagnosticsObject = JSON.parse(boundedDiagnostics) as Record<string, unknown>;
   const serialize = (retainedChecks: typeof checks): string =>
     JSON.stringify({ ...diagnosticsObject, checks: retainedChecks });

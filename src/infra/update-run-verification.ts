@@ -22,12 +22,6 @@ export function isUpdateRunNormalCycleAwaiting(
   );
 }
 
-export function areUpdateRunVerificationChecksHealthy(
-  checks: UpdateRunRecord["verification"]["checks"],
-): boolean {
-  return (checks ?? []).every((check) => check.required === false || check.status === "pass");
-}
-
 export function isUpdateRunVerificationConfirmed(
   verification: UpdateRunRecord["verification"],
 ): boolean {
@@ -38,21 +32,6 @@ export function isUpdateRunVerificationConfirmed(
     verification.readyz === true &&
     verification.channelsReady === true &&
     verification.pluginErrors?.length === 0
-  );
-}
-
-/**
- * A confirmed Gateway is serving, but it has not necessarily survived one
- * ordinary scheduler cycle yet. This stricter predicate is intentionally
- * separate for backwards compatibility with existing update consumers.
- */
-export function isUpdateRunVerificationHealthy(
-  verification: UpdateRunRecord["verification"],
-): boolean {
-  return (
-    isUpdateRunVerificationConfirmed(verification) &&
-    areUpdateRunVerificationChecksHealthy(verification.checks) &&
-    verification.normalCycle?.status === "pass"
   );
 }
 
