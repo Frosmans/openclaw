@@ -44,6 +44,7 @@ export function buildAgentRunFallbackReceipt(params: {
 }
 
 function isFailoverReason(value: unknown): value is FailoverReason {
+  // SAFETY: FAILOVER_REASONS is the immutable protocol vocabulary imported from the gateway package.
   return typeof value === "string" && (FAILOVER_REASONS as readonly string[]).includes(value);
 }
 
@@ -51,6 +52,7 @@ function normalizeAgentRunFallbackReceipt(value: unknown): AgentRunFallbackRecei
   if (!value || typeof value !== "object") {
     return undefined;
   }
+  // SAFETY: The object guard above establishes that property reads are safe; fields are validated below.
   const fallback = value as { occurred?: unknown; reason?: unknown };
   if (typeof fallback.occurred !== "boolean") {
     return undefined;
@@ -64,6 +66,7 @@ function normalizeAgentRunFallbackReceipt(value: unknown): AgentRunFallbackRecei
 export function normalizeAgentRunTerminalReceipt(
   value: unknown,
 ): AgentRunTerminalReceipt | undefined {
+  // SAFETY: The structural checks below validate every field consumed from the untrusted value.
   const receipt = value as AgentRunTerminalReceipt | undefined;
   if (
     !(
