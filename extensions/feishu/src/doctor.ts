@@ -22,6 +22,7 @@ import {
   isRecord,
   normalizeLowercaseStringOrEmpty,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { collectFeishuDoctorAgentIds } from "./doctor-agent-roster.js";
 import { legacyConfigRules, normalizeCompatibilityConfig } from "./doctor-contract.js";
 import { collectFeishuWebhookNotes } from "./webhook-route.js";
 
@@ -72,22 +73,8 @@ type FeishuDoctorSessionEntry = {
   entry: FeishuSessionEntry;
 };
 
-type FeishuDoctorInspection = {
-  stateDir: string;
-  feishuStateDir: string;
-  findings: FeishuDoctorFinding[];
-  sessionEntries: FeishuDoctorSessionEntry[];
-};
-
-type FeishuDoctorRepairReport = {
-  backupDir: string;
-  stateDirRepairAttempted: boolean;
-  rebuiltStateDir: boolean;
-  removedSessionEntries: number;
-  touchedSessionStores: number;
-  archivedSessionArtifacts: number;
-  warnings: string[];
-};
+type FeishuDoctorInspection = ReturnType<typeof inspectFeishuDoctorState>;
+type FeishuDoctorRepairReport = Awaited<ReturnType<typeof repairFeishuDoctorState>>;
 
 function timestampForPath(now = new Date()): string {
   return now.toISOString().replaceAll(":", "-");
@@ -206,23 +193,6 @@ function isFeishuSessionEntry(key: string, value: unknown): boolean {
   );
 }
 
-function collectConfiguredAgentIds(cfg: OpenClawConfig): string[] {
-  const ids = new Set<string>();
-  ids.add(resolveConfiguredDefaultAgentId(cfg));
-  for (const agent of cfg.agents?.list ?? []) {
-    if (typeof agent.id === "string" && agent.id.trim()) {
-      ids.add(normalizeAgentId(agent.id));
-    }
-  }
-  return [...ids].toSorted();
-}
-
-function resolveConfiguredDefaultAgentId(cfg: OpenClawConfig): string {
-  const agents = cfg.agents?.list ?? [];
-  const chosen = agents.find((agent) => agent?.default) ?? agents[0];
-  return normalizeAgentId(typeof chosen?.id === "string" && chosen.id.trim() ? chosen.id : "main");
-}
-
 function collectFeishuSessionTargets(params: {
   cfg: OpenClawConfig;
   env: NodeJS.ProcessEnv;
@@ -238,7 +208,7 @@ function collectFeishuSessionTargets(params: {
     });
   };
 
-  for (const agentId of collectConfiguredAgentIds(params.cfg)) {
+  for (const agentId of collectFeishuDoctorAgentIds(params.cfg)) {
     addTarget({
       agentId,
       storePath: resolveStorePath(params.cfg.session?.store, { agentId, env: params.env }),
@@ -563,15 +533,12 @@ function collectRepairSessionEntries(
   );
 }
 
-function inspectFeishuDoctorState(params: {
-  cfg: OpenClawConfig;
-  env?: NodeJS.ProcessEnv;
-}): FeishuDoctorInspection {
+function inspectFeishuDoctorState(params: { cfg: OpenClawConfig; env?: NodeJS.ProcessEnv }) {
   const env = params.env ?? process.env;
   const stateDir = resolveStateDir(env, os.homedir);
   const feishuStateDir = path.join(stateDir, FEISHU_STATE_DIR);
   const findings: FeishuDoctorFinding[] = collectCorruptFeishuStateJsonFindings(feishuStateDir);
-  const sessionEntries: FeishuDoctorInspection["sessionEntries"] = [];
+  const sessionEntries: FeishuDoctorSessionEntry[] = [];
 
   for (const target of collectFeishuSessionTargets({ cfg: params.cfg, env, stateDir })) {
     for (const { sessionKey: key, entry } of listSessionEntries({
@@ -705,7 +672,7 @@ async function repairFeishuDoctorState(params: {
   env?: NodeJS.ProcessEnv;
   now?: Date;
   inspection?: FeishuDoctorInspection;
-}): Promise<FeishuDoctorRepairReport> {
+}) {
   const env = params.env ?? process.env;
   const now = params.now ?? new Date();
   const inspection = params.inspection ?? inspectFeishuDoctorState({ cfg: params.cfg, env });

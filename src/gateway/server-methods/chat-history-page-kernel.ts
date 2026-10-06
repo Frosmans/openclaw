@@ -27,7 +27,8 @@ import {
 import type {
   SessionTranscriptPageReader,
   ReadRecentSessionMessagesResult,
-} from "../session-transcript-read-kernel.js";
+} from "../session-transcript-read.types.js";
+import { attachChatHistoryReplyMessages } from "./chat-history-reply-messages.js";
 
 export type ChatHistoryPageKernelOptions = {
   readers: SessionTranscriptPageReader;
@@ -38,6 +39,13 @@ export type ChatHistoryPageKernelOptions = {
   readMessageSequence?: (message: unknown) => number | undefined;
 };
 
+function readPageMessageSequence(message: unknown, messageSequences?: Record<string, number>) {
+  return (
+    messageSequences?.[readChatHistoryPaginationKey(message) ?? ""] ??
+    readChatHistoryMessageSeq(message)
+  );
+}
+
 export function resolveChatHistoryNextOffset(params: {
   messages: unknown[];
   projected: unknown[];
@@ -46,9 +54,7 @@ export function resolveChatHistoryNextOffset(params: {
   rawPageMessages: number;
   messageSequences?: Record<string, number>;
 }): number {
-  const sequence = (message: unknown) =>
-    params.messageSequences?.[readChatHistoryPaginationKey(message) ?? ""] ??
-    readChatHistoryMessageSeq(message);
+  const sequence = (message: unknown) => readPageMessageSequence(message, params.messageSequences);
   let oldestSeq: number | undefined;
   let boundedSiblings = 0;
   for (const message of params.messages) {
@@ -133,23 +139,64 @@ function resolveChatHistoryMessageGroup(
   messages: unknown[],
   index: number,
   messageCost: (message: unknown) => number,
+  messageSequences?: Record<string, number>,
 ): { start: number; end: number; cost: number } {
-  const seq = readChatHistoryMessageSeq(messages[index]);
+  const sequence = (message: unknown) => readPageMessageSequence(message, messageSequences);
+  const seq = sequence(messages[index]);
   let start = index;
   let end = index + 1;
   let cost = messageCost(messages[index]);
   if (seq === undefined) {
     return { start, end, cost };
   }
-  while (start > 0 && readChatHistoryMessageSeq(messages[start - 1]) === seq) {
+  while (start > 0 && sequence(messages[start - 1]) === seq) {
     start -= 1;
     cost += messageCost(messages[start]);
   }
-  while (end < messages.length && readChatHistoryMessageSeq(messages[end]) === seq) {
+  while (end < messages.length && sequence(messages[end]) === seq) {
     cost += messageCost(messages[end]);
     end += 1;
   }
   return { start, end, cost };
+}
+
+export function capChatHistoryTail(params: {
+  messages: unknown[];
+  maxCost: number;
+  maxGroupCost: number;
+  messageCost: (message: unknown) => number;
+  messageSequences?: Record<string, number>;
+}): unknown[] {
+  let start = params.messages.length;
+  let cost = 0;
+  while (start > 0) {
+    const group = resolveChatHistoryMessageGroup(
+      params.messages,
+      start - 1,
+      params.messageCost,
+      params.messageSequences,
+    );
+    if (cost + group.cost > params.maxCost) {
+      if (start === params.messages.length) {
+        if (group.cost <= params.maxGroupCost) {
+          // Numeric offsets cannot resume inside a source row. Keep readable siblings together.
+          start = group.start;
+        } else {
+          do {
+            start -= 1;
+            cost += params.messageCost(params.messages[start]);
+          } while (
+            start > group.start &&
+            cost + params.messageCost(params.messages[start - 1]) <= params.maxGroupCost
+          );
+        }
+      }
+      break;
+    }
+    start = group.start;
+    cost += group.cost;
+  }
+  return start > 0 ? params.messages.slice(start) : params.messages;
 }
 
 export function capChatHistoryAroundMessage(params: {
@@ -287,6 +334,7 @@ export async function readChatHistoryPageKernel(
         displaySource: readPage.displaySource,
         maxBytes: maxHistoryBytes,
         readOnly: options.readOnly,
+        sessionStartedAt: entry?.sessionStartedAt,
       });
       if (recoveryContext.length > 0) {
         projected = project([...localMessages, ...recoveryContext]).messages.filter(
@@ -296,8 +344,12 @@ export async function readChatHistoryPageKernel(
     }
     // Numeric offsets do not encode the selected historical transcript source.
     return {
-      messages: augmentChatHistoryWithCanvasBlocks(
-        capChatHistoryAroundMessage({ messages: projected, messageId, maxCost: max }),
+      messages: await attachChatHistoryReplyMessages(
+        augmentChatHistoryWithCanvasBlocks(
+          capChatHistoryAroundMessage({ messages: projected, messageId, maxCost: max }),
+        ),
+        params,
+        options,
       ),
       ...(projection.activity.length ? { activity: projection.activity } : {}),
     };
@@ -328,7 +380,11 @@ export async function readChatHistoryPageKernel(
     !incrementalTail.projection.assistantErrorPending
       ? { deltaCursor: readPage.deltaCursor }
       : {}),
-    messages: augmentChatHistoryWithCanvasBlocks(incrementalTail.projected),
+    messages: await attachChatHistoryReplyMessages(
+      augmentChatHistoryWithCanvasBlocks(incrementalTail.projected),
+      params,
+      options,
+    ),
     ...(incrementalTail.projection.activity.length
       ? { activity: incrementalTail.projection.activity }
       : {}),

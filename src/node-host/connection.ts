@@ -13,6 +13,7 @@ import {
   NODE_WORKER_STATUS_WAIT_VERSION,
   NODE_WORKER_PORTAL_STREAM_VERSION,
   NODE_WORKER_PREPARED_WORKSPACE_VERSION,
+  NODE_WORKER_NATIVE_INFERENCE_VERSION,
   NODE_WORKER_WORKSPACE_QUIESCENCE_VERSION,
   NODE_WORKER_SUPERVISOR_PROTOCOL_FEATURE,
   type NodeWorkerCapacitySnapshot,
@@ -359,8 +360,7 @@ export function startNodeHostConnection({
               ...(gatewayCapabilities.has(GATEWAY_SERVER_CAPS.NODE_WORKER_ENVIRONMENT_SESSION)
                 ? { environmentSession: NODE_WORKER_ENVIRONMENT_SESSION_VERSION }
                 : {}),
-              // Native Linux ownership is qualified; Windows keeps its existing SQLite/script route.
-              ...(process.platform === "linux" &&
+              ...((process.platform === "linux" || process.platform === "win32") &&
               !process.versions.bun &&
               gatewayCapabilities.has(GATEWAY_SERVER_CAPS.NODE_WORKER_WORKSPACE_QUIESCENCE)
                 ? { workspaceQuiescence: NODE_WORKER_WORKSPACE_QUIESCENCE_VERSION }
@@ -373,6 +373,10 @@ export function startNodeHostConnection({
                 : {}),
               ...(gatewayCapabilities.has(GATEWAY_SERVER_CAPS.NODE_WORKER_LAUNCH_TOOL_NAMES)
                 ? { launchToolNames: [...CORE_WORKER_LAUNCH_TOOL_NAMES] }
+                : {}),
+              ...(prepared.nativeInferenceEnabled &&
+              gatewayCapabilities.has(GATEWAY_SERVER_CAPS.NODE_WORKER_NATIVE_INFERENCE)
+                ? { nativeInference: NODE_WORKER_NATIVE_INFERENCE_VERSION }
                 : {}),
             }
           : {
