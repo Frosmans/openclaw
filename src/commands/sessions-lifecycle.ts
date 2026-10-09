@@ -196,7 +196,7 @@ function outputLifecycleResults(
   }
 }
 
-async function runSessionsLifecycleCommand(
+export async function sessionsLifecycleCommand(
   operation: SessionsLifecycleOperation,
   opts: SessionsLifecycleCliOptions,
   runtime: RuntimeEnv,
@@ -297,7 +297,7 @@ async function runSessionsLifecycleCommand(
           "sessions.patch",
           rpcOptions,
           {
-            key: session.key,
+            key: keys[index],
             ...(agent ? { agentId: agent } : {}),
             ...(session.sessionId ? { expectedSessionId: session.sessionId } : {}),
             archived: true,
@@ -313,7 +313,7 @@ async function runSessionsLifecycleCommand(
           "sessions.delete",
           rpcOptions,
           {
-            key: session.key,
+            key: keys[index],
             ...(agent ? { agentId: agent } : {}),
             ...(session.sessionId ? { expectedSessionId: session.sessionId } : {}),
             deleteTranscript: true,
@@ -354,20 +354,4 @@ async function runSessionsLifecycleCommand(
     Boolean(opts.json),
     deletedSessions,
   );
-}
-
-/** Archive one or more stored sessions through the same Gateway patch used by Control UI. */
-export async function sessionsArchiveCommand(
-  opts: SessionsLifecycleCliOptions,
-  runtime: RuntimeEnv,
-): Promise<void> {
-  await runSessionsLifecycleCommand("archive", opts, runtime);
-}
-
-/** Delete one or more stored sessions through the same Gateway lifecycle owner used by Control UI. */
-export async function sessionsDeleteCommand(
-  opts: SessionsLifecycleCliOptions,
-  runtime: RuntimeEnv,
-): Promise<void> {
-  await runSessionsLifecycleCommand("delete", opts, runtime);
 }

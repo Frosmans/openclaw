@@ -39,7 +39,7 @@ import {
   type UpdateRunStep,
 } from "./update-run-record.js";
 import { isUpdateRecoveryPending } from "./update-run-recovery-schema.js";
-import { readRecoveries } from "./update-run-recovery-store.js";
+import { inspectRecoveryRows } from "./update-run-recovery-store.js";
 import {
   recordUpdateRunVerificationCheckRecord,
   recordUpdateRunVerificationRecord,
@@ -382,8 +382,8 @@ export function reconcilePackageOwnerRefusal(
           db,
           query.select("run_id").where("status", "=", "running").limit(1),
         ) ||
-        readRecoveries(db).some(
-          (entry) => entry.runId === expected.runId || isUpdateRecoveryPending(entry),
+        inspectRecoveryRows(db).some(
+          ({ record }) => record.runId === expected.runId || isUpdateRecoveryPending(record),
         )
       ) {
         return false;
@@ -425,8 +425,8 @@ export function finishInterruptedUpdatePreview(
   runExistingOpenClawStateWriteTransaction(
     ({ db }) => {
       if (
-        readRecoveries(db).some(
-          (entry) => entry.runId === expected.runId || isUpdateRecoveryPending(entry),
+        inspectRecoveryRows(db).some(
+          ({ record }) => record.runId === expected.runId || isUpdateRecoveryPending(record),
         )
       ) {
         return;
@@ -482,8 +482,8 @@ export function finishInterruptedUpdateBeforeActivation(
         assertSqliteSchemaContains(db, pathname, recoverySchema);
       }
       if (
-        !readRecoveries(db).some(
-          (entry) => entry.runId === expected.runId || isUpdateRecoveryPending(entry),
+        !inspectRecoveryRows(db).some(
+          ({ record }) => record.runId === expected.runId || isUpdateRecoveryPending(record),
         )
       ) {
         mutateRunInTransaction(
