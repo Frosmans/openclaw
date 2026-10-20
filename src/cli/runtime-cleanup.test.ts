@@ -23,7 +23,8 @@ vi.mock("../state/openclaw-agent-db-resources.js", () => ({
 vi.mock("../state/openclaw-agent-db-lifecycle.js", () => ({
   closeOpenClawAgentDatabasesAsync: databasesClosed,
 }));
-vi.mock("../infra/sqlite-readonly-location-cleanup.js", () => ({
+vi.mock("../infra/sqlite-readonly-location-cleanup.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../infra/sqlite-readonly-location-cleanup.js")>()),
   cleanupSnapshotOperations: snapshotsClosed,
 }));
 vi.mock("../agents/harness/registry.js", () => ({
