@@ -15,12 +15,16 @@ import {
 
 const memoryClosed = vi.hoisted(() => vi.fn(async () => {}));
 const databasesClosed = vi.hoisted(() => vi.fn(async () => {}));
+const snapshotsClosed = vi.hoisted(() => vi.fn(async () => {}));
 const skillsClosed = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../state/openclaw-agent-db-resources.js", () => ({
   hasOpenClawAgentDatabaseAsyncResources: () => true,
 }));
 vi.mock("../state/openclaw-agent-db-lifecycle.js", () => ({
   closeOpenClawAgentDatabasesAsync: databasesClosed,
+}));
+vi.mock("../infra/sqlite-readonly-location-cleanup.js", () => ({
+  cleanupSnapshotOperations: snapshotsClosed,
 }));
 vi.mock("../agents/harness/registry.js", () => ({
   listRegisteredAgentHarnesses: () => [],
@@ -43,6 +47,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   memoryClosed.mockClear();
   databasesClosed.mockClear();
+  snapshotsClosed.mockClear();
   skillsClosed.mockClear();
 });
 afterEach(() => {
@@ -164,6 +169,11 @@ it("stops scheduling and joins admitted callbacks before dependent CLI resources
 it("leaves watcher retirement to an embedded caller without process ownership", async () => {
   await closeCliResources();
   expect(skillsClosed).not.toHaveBeenCalled();
+});
+
+it("drains retained SQLite snapshots during one-shot CLI cleanup", async () => {
+  await closeCliResources();
+  expect(snapshotsClosed).toHaveBeenCalledOnce();
 });
 
 it("retires provider session resources after a one-shot command", async () => {
