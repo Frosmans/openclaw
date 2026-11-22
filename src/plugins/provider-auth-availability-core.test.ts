@@ -57,12 +57,17 @@ describe("capability-aware provider auth", () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it("skips unsupported profiles before refreshing and selects supported media auth", async () => {
-    await expect(auth.resolveProviderAuthProfileApiKey(media)).resolves.toBe("openai:codex");
-    expect(resolveApiKeyForProfile.mock.calls.map(([params]) => params.profileId)).toEqual([
-      "openai:codex",
-    ]);
-  });
+  it.each(["image-generation", "audio-transcription"])(
+    "skips unsupported profiles before refreshing and selects supported %s auth",
+    async (capability) => {
+      await expect(auth.resolveProviderAuthProfileApiKey({ ...media, capability })).resolves.toBe(
+        "openai:codex",
+      );
+      expect(resolveApiKeyForProfile.mock.calls.map(([params]) => params.profileId)).toEqual([
+        "openai:codex",
+      ]);
+    },
+  );
 
   it("rechecks the resolved credential before using an eligible profile's bearer", async () => {
     resolveApiKeyForProfile.mockResolvedValueOnce({

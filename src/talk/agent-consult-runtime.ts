@@ -564,6 +564,8 @@ export async function consultRealtimeVoiceAgent(params: {
           execSession: sessionEntry,
           sessionRoot: normalizeOptionalString(sessionEntry.sessionRoot),
           toolsAllow: params.toolsAllow,
+          // An explicit empty allowlist also selects the native tool-disabled turn path.
+          disableTools: toolAuthorityOverlay.disableTools || params.toolsAllow?.length === 0,
           toolBindings: params.toolBindings,
           timeoutMs,
           runId,

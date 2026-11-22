@@ -119,13 +119,17 @@ sidebarTitle: "Voice and speech"
     | Prompt           | `...openai.prompt`                                                   | (unset) |
     | Silence duration | `...openai.silenceDurationMs`                                        | `800`   |
     | VAD threshold    | `...openai.vadThreshold`                                             | `0.5`   |
-    | Auth             | `...openai.apiKey`, `OPENAI_API_KEY`, or `openai` API-key profile    | Platform API key required |
+    | Auth             | `...openai.apiKey`, `openai` API-key profile, `OPENAI_API_KEY`, or eligible ChatGPT OAuth profile | First configured source |
 
     <Note>
     Uses a WebSocket connection to `wss://api.openai.com/v1/realtime` with
     G.711 u-law (`g711_ulaw` / `audio/pcmu`) audio. For an `openai` API-key
     profile, the Gateway mints an ephemeral Realtime transcription client
-    secret before opening the WebSocket. This streaming provider is for Voice
+    secret before opening the WebSocket. When no Platform API-key source is
+    configured, it can use an eligible ChatGPT OAuth profile through the
+    provider's capability-aware auth owner. Sign in with ChatGPT token-sharing
+    credentials and external CLI discovery are not used for this route. A
+    rejected API key never triggers an OAuth retry. This streaming provider is for Voice
     Call's realtime transcription path; Discord voice records short
     segments and uses the batch `tools.media.audio` transcription path
     instead.

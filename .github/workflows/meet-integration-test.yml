@@ -1,0 +1,196 @@
+name: Meet integration (secretless)
+
+on:
+  push:
+    branches: [test/meet-integrated-route]
+
+# This fork-only candidate proves synthetic boundaries, never a live account or call.
+permissions: {}
+
+concurrency:
+  group: meet-integration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-integration:
+    if: github.repository == 'Frosmans/openclaw'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      COREPACK_HOME: ${{ runner.temp }}/meet-integration/corepack
+      MEET_TEST_HOME: ${{ runner.temp }}/meet-integration/home
+      MEET_TEST_STATE: ${{ runner.temp }}/meet-integration/state
+      NODE_OPTIONS: --max-old-space-size=8192
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Fetch exact public candidate without credentials
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+          git init .
+          git -c credential.helper= remote add origin https://github.com/Frosmans/openclaw.git
+          git -c credential.helper= fetch --depth=1 origin "$CANDIDATE_SHA"
+          git -c core.hooksPath=/dev/null checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          sha256sum package.json pnpm-lock.yaml pnpm-workspace.yaml
+          mkdir -p "$MEET_TEST_HOME" "$MEET_TEST_STATE" "$COREPACK_HOME"
+
+      - name: Setup pinned Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.22.1"
+          package-manager-cache: false
+
+      - name: Setup integrity-pinned pnpm without shared caches
+        uses: ./.github/actions/setup-pnpm-store-cache
+        with:
+          node-version: "24.22.1"
+          cache-mode: "off"
+
+      - name: Install frozen dependencies without account environment
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+            COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            OPENCLAW_STATE_DIR="$MEET_TEST_STATE" \
+            XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+            XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+            pnpm install --frozen-lockfile
+
+      - name: Prove both new regressions against the reviewed pre-integration base
+        env:
+          BASE_SHA: 9ccbb6c5b97c7809c8457d6c86e20c26154761f1
+          PROOF_DIR: ${{ runner.temp }}/meet-integration/red-proof
+        run: |
+          set -euo pipefail
+          git -c credential.helper= fetch --depth=1 origin "$BASE_SHA"
+          mkdir -p "$PROOF_DIR"
+          factory=extensions/openai/realtime-transcription-provider-factory.ts
+          consult=src/talk/agent-consult-runtime.ts
+          cp "$factory" "$PROOF_DIR/factory.candidate.ts"
+          cp "$consult" "$PROOF_DIR/consult.candidate.ts"
+          restore_candidate() {
+            cp "$PROOF_DIR/factory.candidate.ts" "$factory"
+            cp "$PROOF_DIR/consult.candidate.ts" "$consult"
+          }
+          trap restore_candidate EXIT
+          git show "$BASE_SHA:$factory" > "$factory"
+          git show "$BASE_SHA:$consult" > "$consult"
+          prove_red() {
+            local file="$1" pattern="$2" report="$3" status=0
+            env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+              COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+              OPENCLAW_STATE_DIR="$MEET_TEST_STATE" \
+              XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+              XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+              node scripts/run-vitest.mjs "$file" --maxWorkers=1 \
+                --testNamePattern "$pattern" --reporter=json --outputFile "$report" || status=$?
+            test "$status" = 1
+            node -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(r.numFailedTests!==1||r.numRuntimeErrorTestSuites>0)process.exit(1)' "$report"
+          }
+          prove_red extensions/openai/realtime-transcription-provider.test.ts \
+            'discovers an eligible OAuth profile through synchronous and asynchronous auth owners' \
+            "$PROOF_DIR/oauth.json"
+          prove_red src/talk/agent-consult-runtime.test.ts \
+            'uses the native disabled-tools mode for explicit empty allowlists \(true\)' \
+            "$PROOF_DIR/no-tools.json"
+          restore_candidate
+          trap - EXIT
+          git diff --exit-code -- "$factory" "$consult"
+
+      - name: Verify synthetic auth, no-tools dispatch, history, and cancellation
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+            COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            OPENCLAW_STATE_DIR="$MEET_TEST_STATE" \
+            XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+            XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+            node scripts/run-vitest.mjs \
+              extensions/openai/realtime-transcription-provider.test.ts \
+              src/plugins/provider-auth-availability-core.test.ts \
+              src/talk/agent-consult-runtime.test.ts \
+              src/talk/agent-consult-runtime.storage.test.ts \
+              src/meeting-bot/agent-consult.test.ts \
+              src/meeting-bot/realtime-shutdown.test.ts \
+              --maxWorkers=1
+
+      - name: Check touched formatting and lint
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+            COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            OPENCLAW_STATE_DIR="$MEET_TEST_STATE" NODE_OPTIONS="$NODE_OPTIONS" \
+            XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+            XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+            bash -euo pipefail -c '
+              pnpm format:check .github/workflows/meet-integration-test.yml docs/providers/openai/voice-and-speech.md extensions/openai/realtime-transcription-provider-factory.ts extensions/openai/realtime-transcription-provider.test.ts src/plugins/provider-auth-availability-core.test.ts src/talk/agent-consult-runtime.ts src/talk/agent-consult-runtime.test.ts src/talk/agent-consult-runtime.storage.test.ts
+              node scripts/run-oxlint.mjs --tsconfig tsconfig.core.json src/talk/agent-consult-runtime.ts
+              node scripts/run-oxlint.mjs --tsconfig tsconfig.extensions.json extensions/openai/realtime-transcription-provider-factory.ts
+              node scripts/run-oxlint.mjs --tsconfig test/tsconfig/tsconfig.core.test.json src/plugins/provider-auth-availability-core.test.ts src/talk/agent-consult-runtime.test.ts src/talk/agent-consult-runtime.storage.test.ts
+              node scripts/run-oxlint.mjs --tsconfig test/tsconfig/tsconfig.extensions.test.json extensions/openai/realtime-transcription-provider.test.ts
+            '
+
+      - name: Build runtime artifact with canonical CI profile
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+            COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            OPENCLAW_STATE_DIR="$MEET_TEST_STATE" NODE_OPTIONS="$NODE_OPTIONS" \
+            XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+            XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+            pnpm build:ci-artifacts
+
+      - name: Verify production types and workflow contract
+        run: |
+          set -euo pipefail
+          env -i PATH="$PATH" HOME="$MEET_TEST_HOME" CI=true \
+            COREPACK_HOME="$COREPACK_HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            OPENCLAW_STATE_DIR="$MEET_TEST_STATE" NODE_OPTIONS="$NODE_OPTIONS" \
+            XDG_CONFIG_HOME="$MEET_TEST_HOME/.config" \
+            XDG_CACHE_HOME="$MEET_TEST_HOME/.cache" \
+            bash -euo pipefail -c 'pnpm tsgo:core; pnpm tsgo:extensions; pnpm check:workflows'
+
+      - name: Bind proof artifact to exact source
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+          PROOF_RUN_ID: ${{ github.run_id }}
+          PROOF_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          mkdir -p meet-integration-proof
+          cp "$RUNNER_TEMP"/meet-integration/red-proof/*.json meet-integration-proof/
+          tar -czf meet-integration-proof/linux-ci-dist.tar.gz dist dist-runtime packages/*/dist
+          sha256sum \
+            .github/workflows/meet-integration-test.yml \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml \
+            docs/providers/openai/voice-and-speech.md \
+            extensions/openai/realtime-transcription-provider-factory.ts \
+            extensions/openai/realtime-transcription-provider.test.ts \
+            src/plugins/provider-auth-availability-core.test.ts \
+            src/talk/agent-consult-runtime.ts \
+            src/talk/agent-consult-runtime.test.ts \
+            src/talk/agent-consult-runtime.storage.test.ts \
+            meet-integration-proof/linux-ci-dist.tar.gz \
+            > meet-integration-proof/SHA256SUMS
+          jq -n \
+            --arg sha "$CANDIDATE_SHA" \
+            --arg run "$PROOF_RUN_ID" \
+            --arg attempt "$PROOF_RUN_ATTEMPT" \
+            '{schema:"openclaw.meet-integration-proof.v1", repository:"Frosmans/openclaw", sourceSha:$sha, runId:$run, runAttempt:$attempt, runner:"ubuntu-24.04", node:"24.22.1", buildProfile:"ciArtifacts", taskCredentials:false, liveModelOrCallProof:false, installableMacOSPackage:false}' \
+            > meet-integration-proof/manifest.json
+
+      - name: Retain immutable proof, not an installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meet-integration-proof-${{ github.sha }}-${{ github.run_attempt }}
+          path: meet-integration-proof/
+          if-no-files-found: error
+          retention-days: 7

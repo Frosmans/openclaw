@@ -107,7 +107,11 @@ describe("voice consult concrete store ownership", () => {
     expect(target.sessionId).not.toBe(legacyId);
     const transcript = await SessionManager.openAsync(target, state.workspaceDir);
     expect(JSON.stringify(transcript.getEntries())).not.toContain(privateText);
-    expect(dispatched).toMatchObject({ toolsAllow: [], spawnedBy: parentKey });
+    expect(dispatched).toMatchObject({
+      toolsAllow: [],
+      disableTools: true,
+      spawnedBy: parentKey,
+    });
     expect(dispatched.prompt).toContain("Meeting question");
     expect(dispatched.prompt).not.toContain(privateText);
     const child = expectDefined(loadSessionEntry(target), "isolated meeting child");

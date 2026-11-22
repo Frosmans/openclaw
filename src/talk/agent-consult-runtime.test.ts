@@ -330,6 +330,21 @@ describe("realtime voice agent consult runtime", () => {
     );
   });
 
+  it.each([
+    { toolsAllow: undefined, disableTools: false },
+    { toolsAllow: ["read"], disableTools: false },
+    { toolsAllow: [], disableTools: true },
+  ])(
+    "uses the native disabled-tools mode for explicit empty allowlists ($disableTools)",
+    async ({ toolsAllow, disableTools }) => {
+      const { runtime, runEmbeddedAgent } = createAgentRuntime();
+
+      await expect(runConsult(runtime, { toolsAllow })).resolves.toEqual({ text: "Speak this." });
+
+      expect(requireEmbeddedAgentCall(runEmbeddedAgent)).toMatchObject({ toolsAllow, disableTools });
+    },
+  );
+
   it.each(["consult", "requester"])(
     "fails closed before forking or dispatching from a locked %s session",
     async (lockedSession) => {
