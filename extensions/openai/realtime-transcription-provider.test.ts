@@ -170,7 +170,9 @@ describe("buildOpenAIRealtimeTranscriptionProvider", () => {
       includeExternalCliAuth: false,
     };
     expect(providerAuthMocks.isProviderAuthProfileConfigured).toHaveBeenCalledWith(oauthLookup);
-    expect(providerAuthMocks.isProviderAuthProfileConfiguredAsync).toHaveBeenCalledWith(oauthLookup);
+    expect(providerAuthMocks.isProviderAuthProfileConfiguredAsync).toHaveBeenCalledWith(
+      oauthLookup,
+    );
   });
 
   it("delivers a transcript through the server-owned socket with eligible OAuth", async () => {
@@ -236,7 +238,9 @@ describe("buildOpenAIRealtimeTranscriptionProvider", () => {
       response: new Response("Unauthorized", { status: 401 }),
       release: vi.fn(),
     });
-    const session = buildOpenAIRealtimeTranscriptionProvider().createSession({ providerConfig: {} });
+    const session = buildOpenAIRealtimeTranscriptionProvider().createSession({
+      providerConfig: {},
+    });
 
     await expect(session.connect()).rejects.toThrow("rejected the selected API key");
     expect(providerAuthMocks.resolveProviderAuthProfileApiKey).toHaveBeenCalledTimes(1);

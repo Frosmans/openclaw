@@ -341,7 +341,10 @@ describe("realtime voice agent consult runtime", () => {
 
       await expect(runConsult(runtime, { toolsAllow })).resolves.toEqual({ text: "Speak this." });
 
-      expect(requireEmbeddedAgentCall(runEmbeddedAgent)).toMatchObject({ toolsAllow, disableTools });
+      expect(requireEmbeddedAgentCall(runEmbeddedAgent)).toMatchObject({
+        toolsAllow,
+        disableTools,
+      });
     },
   );
 
